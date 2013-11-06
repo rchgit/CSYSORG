@@ -24,13 +24,14 @@ mov es, ax
 ;clear screen
 
 
-; cursor loc set to 0,0
-;MOV AH,02		; SET CURSOR  OPTION
-;MOV BH,00		; PAGE 0
-;MOV DL,00H		; COLUMN POSITION
-;MOV DH,00H	; ROW POSITION
-;INT 10H
+;cursor loc set to 0,0
+MOV AH,02		; SET CURSOR  OPTION
+MOV BH,00		; PAGE 0
+MOV DL,00H		; COLUMN POSITION
+MOV DH,00H	; ROW POSITION
+INT 10H
 
+clear_screen:
 MOV AH,06	; AH=06 scroll function
 MOV AL,00	; AL=00 the entire page
 MOV BH,07	; BH=07 for normal attribute
@@ -48,17 +49,6 @@ mov al, ' '
 mov bl, 1eh ; yellow on blue
 mov cx, 800h
 int 10h
-
-; clear screen
-;MOV AH, 06H
-;MOV AL, 00H
-;MOV BH, 00H
-;MOV CH, 00H
-;MOV CL, 00H
-;MOV DH, 00
-;MOV DL, 200
-;INT 10H
-
 
 
 ; write menu options
@@ -117,26 +107,40 @@ mov cx, 14 ; sttring length
 mov dx,081ch		;dh=screen row, dl=screen column
 int 10h
 
-;MOV AH,02		; SET CURSOR  OPTION
-;MOV BH,00		; PAGE 0
-;MOV DL,2AH		; COLUMN POSITION
-;MOV DH,08H	; ROW POSITION
-;INT 10H
 MOV AH,02		; set the cursor position
 MOV BH,00		; BH=00 page 0 (currently viewed page)
-MOV DL,39h		; center col 
-MOV DH,12h		; center row
+MOV DL,2ah		; col 
+MOV DH,08h		; row
 INT 10H		; invoke the interrupt
 
 empty:
 mov ah, 10h
 int 16h
 cmp ah, 00h
-je empty
+jne switch
+
+switch:
+cmp al, 31h ; if 1
+je one
+cmp al, 32h ; if 2
+je two
+cmp al, 71h ; if q
+je quit
+cmp al, 51h ; if Q
+je quit
+jne empty ; else
+
+one:
+nop
+jmp empty
+
+two:
+nop
+jmp empty
 
 quit:
-;mov ah,4ch
-;int 21h
+mov ah,4ch
+int 21h
 main endp
 end main
 
