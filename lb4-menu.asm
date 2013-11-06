@@ -7,6 +7,7 @@ choice1 db '1 - HORIZONTAL STRIPES'
 choice2 db '2 - VERTICAL STRIPES'
 choiceq db 'Q - QUIT'
 entertext db 'ENTER CHOICE: '
+press db 'Press any key to continue'
 
 .code
 
@@ -14,15 +15,6 @@ main proc far
 mov ax, @data
 mov ds, ax
 mov es, ax
-
-
-; set video mode
-;mov ah, 00h
-;mov al, 0eh
-;int 10h
-
-;clear screen
-
 
 ;cursor loc set to 0,0
 MOV AH,02		; SET CURSOR  OPTION
@@ -41,7 +33,14 @@ MOV DH,24	; DH=24 row value of end point
 MOV DL,79	; DL=79 column value of end point
 INT 10H	; invoke the interrupt
 
+print proc
+mov ah, 13h
+mov al, 01
+mov bh,0
+mov bl, 1eh
+lea bp, dx
 
+empty:
 ; recolor to yellow on blue
 mov ah, 09h
 mov bh, 00h
@@ -49,7 +48,6 @@ mov al, ' '
 mov bl, 1eh ; yellow on blue
 mov cx, 800h
 int 10h
-
 
 ; write menu options
 mov ah, 13h
@@ -97,7 +95,6 @@ mov cx, 8
 mov dx,061ch		;dh=screen row, dl=screen column
 int 10h
 
-
 mov ah, 13h
 mov al, 01
 mov bh,0
@@ -113,11 +110,10 @@ MOV DL,2ah		; col
 MOV DH,08h		; row
 INT 10H		; invoke the interrupt
 
-empty:
 mov ah, 10h
 int 16h
-cmp ah, 00h
-jne switch
+;cmp ah, 00h
+;jne switch
 
 switch:
 cmp al, 31h ; if 1
@@ -128,10 +124,72 @@ cmp al, 71h ; if q
 je quit
 cmp al, 51h ; if Q
 je quit
-jne empty ; else
+jne far ptr empty ; else
 
 one:
-nop
+MOV AH,02		; SET CURSOR  OPTION
+MOV BH,00		; PAGE 0
+MOV DL,00H		; COLUMN POSITION
+MOV DH,00H	; ROW POSITION
+INT 10H
+
+mov ah, 09h
+mov bh, 00h
+mov al, ' '
+mov bl, 07h ; white on black
+mov cx, 1E0h
+int 10h
+
+MOV AH,02		; SET CURSOR  OPTION
+MOV BH,00		; PAGE 0
+MOV DL,00H		; COLUMN POSITION
+MOV DH,06H	; ROW POSITION
+INT 10H
+
+mov ah, 09h
+mov bh, 00h
+mov al, ' '
+mov bl, 57h ; white on magenta
+mov cx, 1E0h
+int 10h
+
+MOV AH,02		; SET CURSOR  OPTION
+MOV BH,00		; PAGE 0
+MOV DL,00H		; COLUMN POSITION
+MOV DH,0CH	; ROW POSITION
+INT 10H
+
+mov ah, 09h
+mov bh, 00h
+mov al, ' '
+mov bl, 67h ; white on yellow
+mov cx, 1E0h
+int 10h
+
+MOV AH,02		; SET CURSOR  OPTION
+MOV BH,00		; PAGE 0
+MOV DL,1AH		; COLUMN POSITION
+MOV DH,15H	; ROW POSITION
+INT 10H
+
+;mov ah, 09h
+;mov bh, 00h
+;mov al, ' '
+;mov bl, 00h ; yellow on blue
+;mov cx, 210h
+;int 10h
+
+mov ah, 13h
+mov al, 01
+mov bh,0
+mov bl, 1eh ; yelllow on blue print
+lea bp, press
+mov cx, 25
+mov dx,151Ah		;dh=screen row, dl=screen column
+int 10h	
+
+mov ah, 10h
+int 16h
 jmp empty
 
 two:

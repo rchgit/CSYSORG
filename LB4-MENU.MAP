@@ -1,9 +1,2 @@
-
- Start  Stop   Length Name               Class
-
- 00000H 000CEH 000CFH _TEXT              CODE
- 000D0H 00113H 00044H _DATA              DATA
- 00120H 0021FH 00100H STACK              STACK
-
-Program entry point at 0000:0000
+Fatal: Unable to open file '..\files\csysorg\lb4-menu.obj'
 
