@@ -1,0 +1,34 @@
+.model small
+.stack 100h
+.data
+
+.code
+main proc far
+
+; ADD
+MOV AX,[BX]
+ADD [SI],AX
+MOV AX,[BX+2]
+ADC [SI+2],AX
+MOV AX,[BX+4]
+ADC [SI+4],AX
+MOV AL,00
+ADC AL,AL
+MOV [SI+6],AL
+
+; SUBTRACT
+MOV AX,[BX]
+SUB [DI],AX
+MOV AX,[BX+2]
+SBB [DI+2],AX
+MOV AX,[BX+4]
+SBB [DI+4],AX
+MOV AL,00
+SBB AL,AL
+MOV [DI+6],AL
+
+; MULTIPLY
+MOV AX,[BX]
+MOV CX, BP
+MUL CX
+

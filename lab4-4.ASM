@@ -1,0 +1,30 @@
+.model small
+.stack 100h
+
+.data
+
+.code
+
+MAIN      	PROC  	FAR
+
+MOV AH,02H		; SET CURSOR  OPTION
+MOV BH,00H		; PAGE 0
+MOV DL,27H	; COLUMN POSITION
+MOV DH,0CH	; ROW POSITION
+INT 10H
+
+MOV AH, 06H
+MOV AL, 00H
+MOV BH, 00H
+MOV CH, 00H
+MOV CL, 00H
+MOV DH, 200
+MOV DL, 100
+INT 10H
+
+
+mov ah,4ch
+int 21h
+
+MAIN      	ENDP
+                END     MAIN
