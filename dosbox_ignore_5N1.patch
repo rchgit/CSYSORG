@@ -1,0 +1,20 @@
+--- /cygdrive/c/Users/adamconnell.VTMDI/Downloads/dosbox-0.74/src/hardware/serialport/serialport.cpp	2010-05-10 13:43:54.000000000 -0400
++++ src/hardware/serialport/serialport.cpp	2011-07-28 11:32:54.826387700 -0400
+@@ -230,8 +230,15 @@
+ 	const char* const dbgtext[]={"none","odd","none","even","none","mark","none","space"};
+ 	log_ser(dbg_serialtraffic,"New COM parameters: baudrate %5.0f, parity %s, wordlen %d, stopbits %d",
+ 		1.0/bitlen*1000.0f,dbgtext[(LCR&0x38)>>3],(LCR&0x3)+5,((LCR&0x4)>>2)+1);
+-#endif	
+-	updatePortConfig (baud_divider, LCR);
++#endif
++	/* It is a common practice to write 0x80 to the LCR register to set
++	 * the DLAB (LCR bit 7) however not all serial ports support the
++	 * configuration that this implies (5,n,1) causing calls to the host
++	 * operating system to configure the serial port as such to fail. Work
++	 * around this by not changingLineProperties to 5,n,1 if DLAB is set */
++	if (LCR != LCR_DIVISOR_Enable_MASK) {
++		updatePortConfig (baud_divider, LCR);
++	}
+ }
+ 
+ static void Serial_EventHandler(Bitu val) {

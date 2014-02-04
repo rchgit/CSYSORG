@@ -1,0 +1,725 @@
+
+<!-- saved from url=(0097)http://net.pku.edu.cn/~course/cs201/2003/mirrorWebster.cs.ucr.edu/Page_asm/RHSoftware/ttt1_1.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+		
+		<meta name="generator" content="Adobe GoLive 4">
+		<title>No Title</title>
+		<meta name="keywords" content="tictactoe, tic-tac-toe, tic, tac, toe, Randall, Hyde, assembly, language, programming">
+	</head>
+
+	<body>
+		<a name="HEADING1"></a>
+		<p><a name="HEADING1-0"></a></p>
+		<h1>TTT1.ASM</h1>
+		<p><a name="HEADING1-1"></a>
+		</p><h3>A Tic-Tac-Toe Program That Uses Bitmapped Pattern Matching</h3>
+		<p>TTT1.ASM uses bitmaps to do the pattern matching necessary to determine the next move in a Tic-Tac-Toe game. In a bitmap, a zero represents an unoccupied position, a one bit indicates an occupied position. The game uses two bitmaps, one for the X moves and one for the O moves. The logical OR of these two bitmaps produces a single bitmap that contains zeros in positions unoccupied by either Xs or Os.</p>
+		<p>Each bitmap (one for the Xs and one for the Os) is sixteen bits long with the L.O. nine bits representing the game board (the H.O. bits are irrelevant and are always zero). The positions on the TTT game board are assigned to the bitmap as follows:</p>
+		<pre>
+
+ 0 | 1 | 2 
+---+---+---
+ 7 | 8 | 3 
+---+---+---
+ 6 | 5 | 4 </pre>
+		<p>This somewhat unusual layout allows us to rotate the gameboard 90 degrees by executing a "ROR AL, 2" (assuming AX contains the bitmap). The drawback is that printing the game board and accessing a cell on the game board (using the standard row-major cell values) is slightly more complicated.</p>
+		<p>The pattern matching is very straight forward. It uses simple logical functions (logical AND and OR) to see if the board matches a current configuration. First, the program masks out any bits whose values we don't care about, then it compares the result against a string of bits (containing zeros in the "don't care" don't care positions and zeros or ones in the positions we are trying to match). If the pattern matches, and the appropriate target cell is empty, the computer makes its move into the target cell.</p>
+		<p>This particular program uses tables of bitmapped values to determine the moves to make. There are essentially three tables: OChkThis/XChkThis, OAgainstThis/XAgainstThis, and OMoveHere/XMoveHere. The program uses an xChkThis entry to mask out the don't care bits. After doing this, it compares the result with the corresponding entry in the xAgainstThis table. If the two values match, then we've matched one of the patterns we've got to play against. Next, the algorithm checks the cell specified by xMoveHere to see if it is empty. If so, the computer places an "O" in the specified cell, otherwise it tries the next possible pattern found in the tables.</p>
+		<p>An example is probably worthwhile at this point. Suppose the current board configuration looks something like the following:</p>
+		<pre>
+
+ O | O |   
+---+---+---
+   | X |   
+---+---+---
+ X | X |   </pre>
+		<p>Remember, the algorithm always checks to see if there is a winning move before it attempts to block X. Therefore, after a rotation of the board we wind up with:</p>
+		<pre>
+
+   |   |   
+---+---+---
+ O | X | X 
+---+---+---
+ O |   | X </pre>
+		<p>Now there is an empty square in the upper left hand corner (keep in mind, this algorithm only moves into cells zero and one). The O bitmap contains the value 1100_0000b and the X bitmap contains the value 1_0001_1000b. It turns out that one of the entries in the OMatchThis and OAgainstThis tables is the value 0C0h. Logically ANDing 0C0h (1100_0000b) with 0C0h (in OCheckThis) produces 0C0h. This matches the value in OAgainstThis (also 0C0h). So the computer moves in the position specified by the corresponding entry in OMoveHere (01h). Whenever a move is made via the OCheckThis and OAgainstThis tables, the computer has won.</p>
+		<p>Assuming there is no winning move for the computer, it checks against the patterns specified by the XCheckThis and XAgainst this tables to determine if it needs to block X so X doesn't win the game. Other than the fact that this uses different tables, the pattern matching algorithm is identical.</p>
+		<pre>
+
+; TIC-TAC-TOE
+; (TTT.ASM)
+;
+; An implementation of the Tic-Tac-Toe game in assembly language.
+;
+; Implementation #1: using bitmaps to indicate the moves to make.
+;
+; Uses the UCR Standard Library v2.0 for 80x86 assembly language 
+programmers.
+;
+; Randall Hyde
+;
+; 8/16/96
+
+
+                .xlist
+                include         ucrlib.a
+                includelib      ucrlib.lib
+                .list
+
+
+TTT             struct
+X               word    0
+O               word    0
+TTT             ends
+
+
+
+dseg            segment para public 'data'
+
+GameBoard       TTT     {}
+
+
+PlayerTkn       byte    'X'
+CompTkn         byte    'O'
+
+
+; Board masks-  Index into this array maps a board position to
+;               a bit mask for selecting the corresponding
+;               bit for that board position.
+;
+; Note: the player positions are organized as follows:
+;
+;   0 | 1 | 2 
+;  ---+---+---
+;   3 | 4 | 5  
+;  ---+---+---
+;   6 | 7 | 8  
+;
+;    Figure 1
+;
+;
+;
+;   the bitmap data is organized as follows:
+;
+;   0 | 1 | 2 
+;  ---+---+---
+;   7 | 8 | 3  
+;  ---+---+---
+;   6 | 5 | 4
+;
+;    Figure 2
+;
+;
+;  
+;
+; Typical bit maps used in the game.
+                
+UpperLeft       =       1
+MiddleSquare    =       100000000b
+
+
+; TTTMask - If you use a board number (times two) as an index into this
+;           array, the corresponding value contains a one bit in that
+;           in the corresponding bit of the bitmask (i.e., an index
+;           of six selects a word with bit #3 set).
+
+TTTMask         word    UpperLeft, 10b, 100b
+                word    10000000b, MiddleSquare, 1000b
+                word    1000000b, 100000b, 10000b
+
+
+
+; The "O" tables (OChkThis, OAgainstThis, and OMoveHere) check
+; to see if the computer can win on the current move.
+;
+; OChkThis table contains bits that correspond to existing
+; positions for the computer.  If the computer has moves in
+; the same positions as OChkThis, the computer can win.
+;
+; Locations filled with "?" characters represent the set
+; bits in OMoveHere.  This position on the game board must
+; be empty (and the positions specified by OChkThis must
+; be filled with Os) if the computer is to win.
+;
+; Locations filled with an asterisk can be any character ("X", 
+"O", or " ").
+;
+; OChkThis[0] = 06h
+;
+;   ? | O | O 
+;  ---+---+---
+;   * | * | *  
+;  ---+---+---
+;   * | * | * 
+;
+;
+; OChkThis[2] = 0ch
+;
+;   ? | * | * 
+;  ---+---+---
+;   O | * | *  
+;  ---+---+---
+;   O | * | * 
+;
+;
+; OChkThis[4] = 110h
+;
+;   ? | * | * 
+;  ---+---+---
+;   * | O | *  
+;  ---+---+---
+;   * | * | O
+;
+;
+; OChkThis[6] = 05h
+;
+;   O | ? | O 
+;  ---+---+---
+;   * | * | *  
+;  ---+---+---
+;   * | * | *
+;
+;
+; OChkThis[8] = 120h
+;
+;   * | ? | * 
+;  ---+---+---
+;   * | O | *  
+;  ---+---+---
+;   * | O | *
+;
+
+OChkThis        word    006h, 0c0h, 110h, 005h, 120h
+MaxOs           =       $-OChkThis
+
+OAgainstThis    word    006h, 0c0h, 110h, 005h, 120h
+
+OMoveHere       word    001h, 001h, 001h, 002h, 002h
+
+
+
+
+
+; The X tables provide the moves the computer will need to make in
+; order to block the computer from winning.
+;
+; XChkThis contains bitmaps we compare against the X moves to see
+; if X is about to win and we need to block X.
+;
+;
+;
+; XChkThis[0] = 120h
+;
+;   ? | X | X 
+;  ---+---+---
+;   * | * | *  
+;  ---+---+---
+;   * | * | *
+;
+;
+; XChkThis[2] = 0c0h
+;
+;   ? | * | * 
+;  ---+---+---
+;   X | * | *  
+;  ---+---+---
+;   X | * | *
+;
+;
+; XChkThis[4] = 110h
+;
+;   ? | * | * 
+;  ---+---+---
+;   * | X | *  
+;  ---+---+---
+;   * | * | X
+;
+;
+; XChkThis[6] = 005h
+;
+;   X | ? | X 
+;  ---+---+---
+;   * | * | *  
+;  ---+---+---
+;   * | * | *
+;
+;
+; XChkThis[8] = 120h
+;
+;   * | ? | * 
+;  ---+---+---
+;   * | X | *  
+;  ---+---+---
+;   * | X | *
+;
+;
+; XChkThis[10] = 1FFh and 44h
+;
+;     | ? | X   
+;  ---+---+---  
+;     | O |       (Note, logically an "O" must be in center 
+square
+;  ---+---+---     for this configuration to occur.)
+;   X |   |     
+;
+;
+; XChkThis[12] = 0C7h and 82h
+;
+;   ? | X |     
+;  ---+---+---  
+;   X | O | *     (Note, logically an "O" must be in center 
+square
+;  ---+---+---     for this configuration to occur.)
+;     | * | *   
+;
+;
+; XChkThis[14] = 0C7h and 84h
+;
+;   ? |   | X   
+;  ---+---+---  
+;   X | O | *     (Note, logically an "O" must be in center 
+square
+;  ---+---+---     for this configuration to occur.)
+;     | * | *   
+;
+;
+; XChkThis[16] = 0C7h and 44h
+;
+;   ? |   | X   
+;  ---+---+---    (Note, logically an "O" must be in center 
+square
+;     | O | *      for this configuration to occur.)
+;  ---+---+---  
+;   X | * | *   
+;
+;
+; XChkThis[18] = 122h and 100h
+;
+;   * | ? | *   
+;  ---+---+---
+;   * | X | * 
+;  ---+---+---  
+;   * |   | *   
+;
+;
+; XChkThis[20] = 111h and 100h
+;
+;   ? | * | *   
+;  ---+---+---
+;   * | X | * 
+;  ---+---+---  
+;   * | * |     
+
+XChkThis        word    006h, 0c0h, 110h, 005h, 120h, 1FFh, 0C7h,
+                        0C7h, 0C7h, 122h, 111h
+MaxXs           =       $-XChkThis
+                                            
+XAgainstThis    word    006h, 0c0h, 110h, 005h, 120h, 044h, 082h,
+                        084h, 044h, 100h, 100h
+
+XMoveHere       word    001h, 001h, 001h, 002h, 002h, 002h, 001h,
+                        001h, 001h, 002h, 001h
+dseg            ends
+
+
+
+cseg            segment para public 'code'
+                assume  cs:cseg, ds:dseg
+
+
+; DispTTT-
+;
+; Displays the game board and a map showing the user all
+; possible moves they can make.  This function displays
+; information like the following:
+;
+;     |   |       X | X | O 
+;  ---+---+---   ---+---+---
+;     |   | 5     O | O |   
+;  ---+---+---   ---+---+---
+;     | 7 | 8     X |   |   
+;
+; The right-hand board shows the current moves, the left-hand
+; board lists the possible player moves.
+;
+; PutSquare-    Outputs a Blank, "X", or "Y" depending 
+upon whether
+;               the current cell is unoccupied, contains a player's
+;               token, or the computer's token.
+;
+; PSNum-        Outputs a single digit in the range 0..8 to denote
+;               the key the user should press to select a give cell.
+;               PSNum only outputs the digit if this is a possible
+;               move for the play (i.e., the cell is current unoccupied).
+;               It outputs a blank to the cell if a move is not possible.
+;
+; DispTTT-      Calls the above two routines to display the tic-tac-toe
+;               board.
+
+
+
+PutSquare       textequ &lt;call _PutSquare&gt;
+_PutSquare      proc    near
+
+; Note: SI contains the index (times two) into the game board.
+; This code checks the bit position in the Player's bit map
+; to see if it is set.  If so, it outputs the Player's character
+; ('X' or "O").
+
+                putc    ' '
+                mov     al, PlayerTkn   ;Determine if this cell is
+                mov     dx, GameBoard.X ; occupied by the Player.
+                test    dx, TTTMask[si]
+                jnz     Occupied
+
+; If the player isn't at board position "SI" (see Figure 1), 
+; then see if the computer is at that position.
+
+                mov     al, CompTkn     ;If not, determine if this cell is
+                mov     dx, GameBoard.O ; occupied by the computer's piece.
+                test    dx, TTTMask[si]
+                jnz     Occupied
+
+; If we fall through to this point, then this position on the board is
+; unoccupied.
+
+                mov     al, ' '         ;Must be blank!
+Occupied:       putc
+
+                putc    " "
+                add     si, 2
+                ret
+_PutSquare      endp
+
+
+
+
+
+; PSNum-        Outputs a digit to a TTT cell if that position is
+;               unoccupied, outputs a blank to a cell if that position
+;               is occupied and the user cannot move there.
+
+PSNum           textequ &lt;call _PSNum&gt;
+_PSNum          proc    near
+
+; OR the Player and computer boards together.  Then check the bit
+; position specified by "SI" to see if either the player or the
+; computer occupies this position.  If not, print the digit
+; for this square since the user can move there.
+
+                putc    " "
+                mov     ax, GameBoard.X ;Determine if this cell is
+                or      ax, GameBoard.O ; unoccupied (corresponding bits in
+                and     ax, TTTMask[si] ; X and O must both be zero).
+                mov     al, ' '         ;Assume this cell is occupied.
+                jnz     putSp
+
+; The current cell is unoccupied.  Put a digit in it to identify this move
+; for the user.
+
+                mov     ax, si          ;SI = cell # * 2.  Divide by
+                shr     ax, 1           ; two and convert to a digit.
+                or      al, '0'
+
+PutSp:          putc
+                putc    ' '
+                add     si, 2
+                ret
+_PSNum          endp
+
+
+
+
+; Print the TTT board and the possible moves board.
+
+DispTTT         textequ &lt;call _DispTTT&gt;
+_DispTTT        proc    near
+                push    ax
+                push    dx
+                push    si
+
+                mov     si, 0
+
+                putcr
+                jmp     PrtTTT
+
+; Each execution of the following loop prints one row on the game board
+; and one row on the possible moves board.
+
+PrtLoop:        print   "---+---+---  ---+---+---",nl
+
+; Print one row of possible moves.
+
+PrtTTT:         PSNum           ;Display possible moves.
+                putc    "|"
+                PSNum
+                putc    "|"
+                PSNum
+
+                sub     si, 6   ;Restore SI's value (PSNum adds 2 on exit).
+
+                print   "  "
+        
+; Print one row of moves already taken
+                 
+                PutSquare       ;Display computer and player's
+                putc    "|"     ; moves thus far.
+                PutSquare
+                putc    "|"
+                PutSquare
+
+                putcr
+
+; The calls to PutSquare increment SI by two, executing three of them
+; automatically moves us to the next row.  Down here, we just need
+; to check to see if we've already processed all the squares.
+
+                cmp     si, 18  ;SI increments by two for each square.
+                jb      PrtLoop ; We're done if we process nine squares.
+
+                pop     si
+                pop     dx
+                pop     ax
+                ret
+_DispTTT        endp
+
+                
+                
+
+; GetMove-      Reads (and verifies) a user move.
+
+GetMove         textequ &lt;call _GetMove&gt;
+_GetMove        proc
+                push    ax
+                push    bx
+
+                print   "Your move:"
+                jmp     RptInput
+
+BadInput:       putc    Bell
+RptInput:       rawgetc                 ;Read a single character
+                putc                    ; (unbuffered) and check to see
+                tolower                 ; if the user wants to quit.
+                cmp     al, 'q'
+                je      QuitGame
+                sub     al, '0'         ;Check for a digit.  Anything else
+                cmp     al, 9           ; is an error.
+                jae     BadInput
+
+                mov     bl, al          ;Check to see if this
+                mov     bh, 0           ; location on the board
+                shl     bx, 1           ; is already occupied.
+                mov     ax, GameBoard.X ; If it is, then there will be a
+                or      ax, GameBoard.O ; set bit at position AL*2 in the
+                test    ax, TTTMask[bx] ; X or O bitmap.
+                jnz     BadInput
+
+; If this spot is empty on the board, mark it as occupied by the user.
+
+                mov     ax, TTTMask[bx] ;Make the player's move.
+                or      GameBoard.X, ax
+
+                pop     bx
+                pop     ax
+                ret
+
+QuitGame:       ExitPgm
+_GetMove        endp
+                
+                
+                
+                
+; CmpMove-      Logic to implement the computer's move.
+;               Note: the TTT game board is symmetrical, therefore
+;               this logic only checks to see if it should move in the
+;               Upper Left Hand corner or the cell immediately to the
+;               left of the upper left hand corner.  To test all the
+;               other positions, this function simply rotates the
+;               board 90 degrees and tries again.
+;
+;
+; For OTry4 and XTry4, BX contains a bitmap of O's moves.
+; DX contains a bitmap of all filled positions (X's moves 
+; or'd with O's moves).
+;
+;
+;
+; OTry4- This routine checks the board to see if there is a winning 
+move        
+;        for the computer.  On entry, SI contains an index into the
+;        OMoveHere/OChkThis/OAgainstThis tables.  This function checks.
+;        If O can win, it returns with the zero flag set.  Otherwise it
+;        rotates the board and tries again.  If it rotates the board
+;        four times without winning, it assumes there is no winning move
+;        so it return with the zero flag clear.
+;        
+
+
+OTry4           textequ &lt;call _OTry4&gt;
+_OTry4          proc    near
+                mov     cx, OMoveHere[si]      ;Here is the square to move 
+to.
+t4Lp:           mov     ax, bx                 ;Get current O positions.
+                and     ax, OChkThis[si]       ;Mask out don't care posns.
+                cmp     ax, OAgainstThis[si]   ;Check for a winning move.
+
+                jne     tryNext                ;If no match.
+                test    cl, dl                 ;See if cell is empty.
+                jz      Done                   ;We've won if it is.
+
+tryNext:        ror     bl, 2                  ;No winning move yet, so
+                shl     cl, 2                  ; rotate board and try
+                jnz     t4Lp                   ; again.  Quit after four
+                cmp     cl, 1                  ; rotations and return ZF=0
+                                               ; to denote failure.
+Done:           ret
+_OTry4          endp
+
+
+
+; XTry4- This routine checks to see if it must make a move to block
+;        X to keep X from winning.  It's logic is identical to OTry4
+;        except it uses different tables.
+
+XTry4           textequ &lt;call _XTry4&gt;
+_XTry4          proc    near
+                mov     cx, OMoveHere[si]
+t4Lp:           mov     ax, bx
+                and     ax, XChkThis[si]
+                cmp     ax, XAgainstThis[si]
+                jne     tryNext
+                test    cl, dl
+                jz      Done
+
+tryNext:        ror     bl, 2
+                shl     cl, 2
+                jnz     t4Lp
+                cmp     cl, 1
+
+Done:           ret
+_XTry4          endp
+
+
+
+; Okay, make the computer's move.
+
+CmpMove         textequ &lt;call _CmpMove&gt;
+_CmpMove        proc    near
+
+
+; Strategy #1- See if we can win on the next move.
+
+                mov     si, 0
+ChkOs:          mov     bx, GameBoard.O   ;BX contains O Bitmap.
+                mov     dx, bx            ;DX contains zeros in empty 
+cells,
+                or      dx, GameBoard.X   ; ones in occupied cells.
+                OTry4                     ;See if we match current pattern.
+                jz      WinCL             ;ZF=1 if success.
+                add     si, 2             ;Move to next table entry if 
+failure
+                cmp     si, MaxOs         ;Processed entire table?
+                jb      ChkOs
+
+
+
+; Strategy #2- See if we need to block X.  Logic is identical to the above.
+
+                mov     si, 0
+ChkXs:          mov     bx, GameBoard.X
+                mov     dx, bx
+                or      dx, GameBoard.O
+                XTry4
+                jz      MoveCL
+                add     si, 2
+                cmp     si, MaxXs
+                jb      ChkXs
+
+
+
+
+; Strategy #3: Find the first available empty cell and move there.
+
+XsDone:         mov     cl, 1
+                mov     bx, GameBoard.O
+                or      bx, GameBoard.X
+FindEmpty:      shr     bx, 1
+                jnc     MoveCL
+                shl     cl, 1
+                jnz     FindEmpty
+
+; If we hit this point, the game is over because the board is full.
+
+                stc
+                ret
+
+; WinCL-        The CL register contains the winning move.
+
+WinCL:          or      byte ptr GameBoard.O, cl
+                stc
+                ret
+
+; MoveCL-       The CL register contains the computer's move, but
+;               the computer hasn't won yet.
+
+MoveCL:         or      byte ptr GameBoard.O, cl
+                clc
+                ret
+_CmpMove        endp
+
+
+
+Main            proc
+                mov     ax, dseg
+                mov     ds, ax
+                mov     es, ax
+
+; Do the first move manually.
+; If the user chooses the middle cell, pick the upper left hand
+; cell.  Otherwise pick the middle cell.
+
+                DispTTT
+                GetMove
+                test    GameBoard.X, MiddleSquare       ;Middle Square?
+                jz      MoveMiddle
+                mov     GameBoard.O, UpperLeft          ;Upper left corner.
+                jmp     NextMove
+
+MoveMiddle:     mov     GameBoard.O, MiddleSquare
+
+
+; Okay, after the first move we need to get smart...
+
+NextMove:       DispTTT
+                GetMove
+                mov     ax, GameBoard.X ;See if the gameboard is
+                or      ax, GameBoard.O ; full (game over).
+                cmp     ax, 111111111b
+                je      GameOver
+
+                CmpMove
+                jnc     NextMove                ;Carry set if game over.
+
+GameOver:       DispTTT
+                print   nl,"Game Over",nl
+Quit:           ExitPgm                         ;DOS macro to quit program.
+Main            endp
+
+cseg            ends
+
+sseg            segment para stack 'stack'
+stk             db      512 dup (?)
+sseg            ends
+
+
+zzzzzzseg       segment para public 'zzzzzz'
+LastBytes       db      16 dup (?)
+zzzzzzseg       ends
+                end     Main
+</pre>
+		<hr>
+		<h2>Number of Web Site Hits since Dec 1, 1999:</h2>
+		<img src="./tictac1_files/counter.cgi">
+	
+
+
+</body></html>

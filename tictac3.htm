@@ -1,0 +1,831 @@
+
+<!-- saved from url=(0097)http://net.pku.edu.cn/~course/cs201/2003/mirrorWebster.cs.ucr.edu/Page_asm/RHSoftware/ttt3_1.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+		<title>TTT3</title>
+	</head>
+
+	<body>
+		<a name="HEADING1"></a>
+		<p><a name="HEADING1-0"></a>
+		</p><h1>TTT3.ASM</h1>
+		<a name="HEADING1-1"></a>
+		<h3>A Tic-Tac-Toe Program That Uses Regular Expressions</h3>
+		<p>TTT3.ASM is quite different than TT1.ASM and TT2.ASM; it uses character strings to represent the TTT game board, it uses regular expression patterns to determine which move to make, and it checks all possible moves on the board directly, it does not check a subset of possible moves and then rotate the board to check the other possibilities. Nevertheless, this particular solution is a bit shorter (counting lines of code) than either TT1.ASM or TTT2.ASM.
+		</p><p>
+		</p><p>The first big change in the data structures is in the representation of the playing board. Unlike TTT1.ASM and TTT2.ASM, TTT3.ASM uses a single playing board that holds all moves (not just O or X moves like the other two programs). The playing board is an array of nine characters organized in row major order:
+		</p><p>
+		</p><p>
+		</p><pre>
+
+;               Position:  012345678
+TTTBoard        byte      "         ",0
+
+  0 | 1 | 2 
+ ---+---+---
+  3 | 4 | 5 
+ ---+---+---
+  6 | 7 | 8 
+
+</pre>
+		The program stores an actual "X" or "O" character into this array to mark moves by the player or by the computer.
+		<p>
+		</p><p>To check for patterns that the computer must move against, this program uses a sequence of regular expressions. Each regular expression (RE) is ten bytes long. The first byte of each regular expression contains an index into the TTT board where the computer must move if the RE matches the game board. The next nine bytes contain the actual RE. Each character position in the RE contains one of four characters. If the character contains a period ("."), then the RE matches any character on the game board (i.e., this is a "don't care" position). Any other character in the RE must exactly match the character on the game board (which will be a space, an "X", or an "O"). If the match is made, the computer puts an "O" in the cell specified by the first byte of the RE.
+		</p><p>
+		</p><p>There are two sets of REs the computer uses. The first set of REs matches patterns when the computer can win by placing an "O" in a specific location. The second set of REs matches patterns when the computer must place an "O" in a square to block the player from winning. The computer first tries to match a pattern in the O list; failing this, it attempts to match a pattern in the X list. If it fails to match a pattern in both lists, it picks the first available cell. If there are no cells left, the game is over.
+		</p><p>
+		</p><p>
+		</p><pre>
+
+; TIC-TAC-TOE
+; (TTT3.ASM)
+;
+; An implementation of the Tic-Tac-Toe game in assembly language.
+;
+; Implementation #3: using regular expressions to indicate the moves to make.
+;
+; Uses the UCR Standard Library v2.0 for 80x86 assembly language programmers.
+;
+; Randall Hyde
+;
+; 8/16/96
+;
+;
+; Note: This code is substantially similar to that for TTT1.ASM and
+;       TTT2.ASM.  See those files for additional comments about this
+;       code.
+
+
+                .386
+                option  segment:use16
+
+                .xlist
+                include         ucrlib.a
+                includelib      ucrlib.lib
+                .list
+
+
+
+dseg            segment para public 'data'
+
+; MoveCntr- Counts the number of moves we've made so far (max = 9).
+
+MoveCntr        word    0
+
+
+; GameBoard is initialized as a 3x3 array of spaces.
+
+GameBoard       byte    3 dup ( 3 dup (" ")),0
+
+
+; OMoves is the set of regular expressions that will match
+; the board if there is a winning move.  The first byte of
+; each entry is the position to move to.  The next nine bytes
+; represent the regular expression to check.  A period in the
+; regular expression matches any single character.  All other
+; characters in the regular expression match exactly that char.
+;
+; Note: in the diagrams below, "*" matches any character,
+;       ? denotes the position to move to (it must currently
+;       contain a space character),  any other character
+;       must exactly match on the game board.
+
+;  ? | O | O 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+OMoves          byte    0," OO......"
+
+;  O | * | * 
+; ---+---+---
+;  O | * | * 
+; ---+---+---
+;  ? | * | * 
+
+                byte    6,"O..O.. .."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  O | O | ? 
+
+                byte    8,"......OO "
+
+;  * | * | ? 
+; ---+---+---
+;  * | * | O 
+; ---+---+---
+;  * | * | O 
+
+                byte    2,".. ..O..O"
+
+
+;  ? | * | * 
+; ---+---+---
+;  O | * | * 
+; ---+---+---
+;  O | * | * 
+
+                byte    0," ..O..O.."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  ? | O | O 
+
+                byte    6,"...... OO"
+
+;  * | * | O 
+; ---+---+---
+;  * | * | O 
+; ---+---+---
+;  * | * | ? 
+
+                byte    8,"..O..O.. "
+
+;  O | O | ? 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+                byte    2,"OO ......"
+
+
+;  ? | * | * 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  * | * | O 
+
+                byte    0," ...O...O"
+
+;  * | * | O 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  ? | * | * 
+
+                byte    6,"..O.O. .."
+
+;  O | * | * 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  * | * | ? 
+
+                byte    8,"O...O... "
+
+;  * | * | ? 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  O | * | * 
+
+                byte    2,".. .O.O.."
+
+
+;  O | ? | O 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+                byte    1,"O O......"
+
+;  O | * | * 
+; ---+---+---
+;  ? | * | * 
+; ---+---+---
+;  O | * | * 
+
+                byte    3,"O.. ..O.."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  O | ? | O 
+
+                byte    7,"......O O"
+
+;  * | * | O 
+; ---+---+---
+;  * | * | ? 
+; ---+---+---
+;  * | * | O 
+
+                byte    5,"..O.. ..O"
+
+
+;  * | ? | * 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  * | O | * 
+
+                byte    1,". ..O..O."
+
+;  * | * | * 
+; ---+---+---
+;  ? | O | O 
+; ---+---+---
+;  * | * | * 
+
+                byte    3,"... OO..."
+
+;  * | O | * 
+; ---+---+---
+;  * | O | * 
+; ---+---+---
+;  * | ? | * 
+
+                byte    7,".O..O.. ."
+
+;  * | * | * 
+; ---+---+---
+;  O | O | ? 
+; ---+---+---
+;  * | * | * 
+
+                byte    5,"...OO ..."
+OCnt            =       ($-OMoves)/10
+
+
+
+; The XMoves array is similar to the OMoves array.
+; If a give regular expression in XMoves matches the
+; current game board, then we must put an "O" in the
+; position specified by the first byte of each RE below
+; in order to block X.
+
+
+
+;    | ? | X 
+; ---+---+---
+;    | O |        ;Note: "O" will have to be in center square
+; ---+---+---     ; for this configuration to exist.
+;  X |   |   
+
+
+XMoves          byte    1,"  X . X  "
+
+;  ? | X | X 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+                byte    0," XX......"
+
+;  X | * | * 
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;  ? | * | * 
+
+                byte    6,"X..X.. .."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  X | X | ? 
+
+                byte    8,"......XX "
+
+;  * | * | ? 
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  * | * | X 
+
+                byte    2,".. ..X..X"
+
+
+;  ? | * | * 
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;  X | * | * 
+
+                byte    0," ..X..X.."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  ? | X | X 
+
+                byte    6,"...... XX"
+
+;  * | * | X 
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  * | * | ? 
+
+                byte    8,"..X..X.. "
+
+;  X | X | ? 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+                byte    2,"XX ......"
+
+
+;  ? | * | * 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  * | * | X 
+
+                byte    0," ...X...X"
+
+;  * | * | X 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  ? | * | * 
+
+                byte    6,"..X.X. .."
+
+;  X | * | * 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  * | * | ? 
+
+                byte    8,"X...X... "
+
+;  * | * | ? 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  X | * | * 
+
+                byte    2,".. .X.X.."
+
+
+;  X | ? | X 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+
+                byte    1,"X X......"
+
+;  X | * | * 
+; ---+---+---
+;  ? | * | * 
+; ---+---+---
+;  X | * | * 
+
+                byte    3,"X.. ..X.."
+
+;  * | * | * 
+; ---+---+---
+;  * | * | * 
+; ---+---+---
+;  X | ? | X 
+
+                byte    7,"......X X"
+
+;  * | * | X 
+; ---+---+---
+;  * | * | ? 
+; ---+---+---
+;  * | * | X 
+
+                byte    5,"..X.. ..X"
+
+
+;  * | ? | * 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  * | X | * 
+
+                byte    1,". ..X..X."
+
+;  * | * | * 
+; ---+---+---
+;  ? | X | X
+; ---+---+---
+;  * | * | * 
+
+                byte    3,"... XX..."
+
+;  * | X | * 
+; ---+---+---
+;  * | X | * 
+; ---+---+---
+;  * | ? | * 
+
+                byte    7,".X..X.. ."
+
+;  * | * | * 
+; ---+---+---
+;  X | X | ? 
+; ---+---+---
+;  * | * | * 
+
+                byte    5,"...XX ..."
+
+
+ 
+;  ? | X |   
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;    | * | * 
+
+                byte    0," X X.. .."
+
+;    | * | * 
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;  ? | X |   
+
+                byte    6," ..X.. X "
+
+;  * | * |   
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;    | X | ? 
+
+                byte    8,".. ..X X "
+
+;    | X | ? 
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  * | * |   
+
+                byte    2," X ..X.. "
+
+
+;  ? |   | X 
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;    | * | * 
+
+                byte    0,"  XX.. .."
+
+;  X | * | * 
+; ---+---+---
+;    | * | * 
+; ---+---+---
+;  ? | X |   
+
+                byte    6,"X.. .. X "
+
+;  * | * |   
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  X |   | ? 
+
+                byte    8,".. .XX   "
+
+;  X |   | ? 
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  * | * |   
+
+                byte    2,"X  ..X.. "
+
+
+;  ? | X |   
+; ---+---+---
+;    | * | * 
+; ---+---+---
+;  X | * | * 
+
+                byte    0," X  ..X.."
+
+;    | * | * 
+; ---+---+---
+;  X | * | * 
+; ---+---+---
+;  ? |   | X 
+
+                byte    6," ..X..  X"
+
+;  * | * | X 
+; ---+---+---
+;  * | * |   
+; ---+---+---
+;    | X | ? 
+
+                byte    8,"..X..  X "
+
+;  X |   | ? 
+; ---+---+---
+;  * | * | X 
+; ---+---+---
+;  * | * |   
+
+                byte    2,"X  ..X.. "
+
+XCnt            =       ($-XMoves)/10
+
+dseg            ends
+
+
+
+cseg            segment para public 'code'
+                assume  cs:cseg, ds:dseg
+
+
+; DispTTT-
+;
+; Displays the game board and a map showing the user all
+; possible moves they can make.  This function displays
+; information like the following:
+;
+;     |   |       X | X | O 
+;  ---+---+---   ---+---+---
+;     |   | 5     O | O |   
+;  ---+---+---   ---+---+---
+;     | 7 | 8     X |   |   
+;
+; The right-hand board shows the current moves, the left-hand
+; board lists the possible player moves.
+;
+; PSNum-        Outputs a single digit in the range 0..8 to denote
+;               the key the user should press to select a give cell.
+;               PSNum only outputs the digit if this is a possible
+;               move for the play (i.e., the cell is current unoccupied).
+;               It outputs a blank to the cell if a move is not possible.
+;
+; DispTTT-      Calls the above routine to display the tic-tac-toe
+;               board.
+
+
+
+
+; PSNum-        Outputs a digit to a TTT cell if that position is
+;               unoccupied, outputs a blank to a cell if that position
+;               is occupied and the user cannot move there.  SI contains
+;               the cell # (0-8).
+
+PSNum           textequ &lt;call _PSNum&gt;
+_PSNum          proc    near
+
+                putc    " "
+                mov     al, GameBoard[si]
+                cmp     al, " "
+                mov     al, " "
+                jne     PutCell
+                mov     ax, si
+                or      al, '0'
+PutCell:        putc
+                putc    " "
+                inc     si              ;On to next cell.
+                ret
+_PSNum          endp
+
+
+
+
+; Print the TTT board and the possible moves board.
+
+DispTTT         textequ &lt;call _DispTTT&gt;
+_DispTTT        proc    near
+                push    ax
+                push    dx
+                push    si
+
+                mov     si, 0
+
+                putcr
+                putcr
+                jmp     PrtTTT
+
+; Each execution of the following loop prints one row on the game board
+; and one row on the possible moves board.
+
+PrtLoop:        print   "---+---+---  ---+---+---",nl
+PrtTTT:         PSNum           ;Display possible moves.
+                putc    "|"
+                PSNum
+                putc    "|"
+                PSNum
+
+                print   "   "
+                         
+                mov     al, GameBoard[si-3]
+                putc
+                print   " | "   ; moves thus far.
+
+                mov     al, GameBoard[si-2]
+                putc
+                print   " | "
+
+                mov     al, GameBoard[si-1]
+                putc
+                putcr
+                cmp     si, 9
+                jb      PrtLoop
+
+                pop     si
+                pop     dx
+                pop     ax
+                ret
+_DispTTT        endp
+
+                
+                
+
+; GetMove-      Reads (and verifies) a user move.
+
+GetMove         textequ &lt;call _GetMove&gt;
+_GetMove        proc
+                push    ax
+                push    bx
+
+                print   "Your move:"
+                jmp     RptInput
+
+BadInput:       putc    Bell
+RptInput:       rawgetc                         ;Read a single character
+                putc                            ; (unbuffered) and check to see
+                tolower                         ; if the user wants to quit.
+                cmp     al, 'q'
+                je      QuitGame
+                sub     al, '0'                 ;Check for a digit. Anything
+                cmp     al, 9                   ; else is an error.
+                jae     BadInput
+
+                mov     bl, al                  ;Check to see if this
+                mov     bh, 0                   ; location on the board
+                cmp     GameBoard[bx], ' '      ; is already occupied.
+                jne     BadInput
+
+                mov     GameBoard[bx], 'X'      ;Make the player's move.
+
+                pop     bx
+                pop     ax
+                ret
+
+QuitGame:       ExitPgm
+_GetMove        endp
+                
+
+
+; TryMov-
+;
+;       This function compares the game board against the regular
+;       expression that SI points at.  Note that all characters
+;       except periods in the regular expression must exactly
+;       match the characters on the game board.  The period in
+;       an RE matches anything (X, O, or space).
+
+TryMov          textequ &lt;call _tryMove&gt;
+_tryMove        proc    near
+                push    ax
+                push    bx
+                push    cx
+                mov     bx, 0
+                mov     cx, 9
+CmpLoop:        mov     al, [si+1][bx]
+                cmp     al, '.'
+                je      Equal
+                cmp     al, GameBoard[bx]
+                jne     NotEqual
+Equal:          inc     bx
+                loop    CmpLoop
+                stc
+                pop     cx
+                pop     bx
+                pop     ax
+                ret
+
+NotEqual:       clc
+                pop     cx
+                pop     bx
+                pop     ax
+                ret
+_tryMove        endp
+
+
+
+; CmptMov-      Compute the next move for the Computer "player"
+
+CmptMov         textequ &lt;call _cmove&gt;
+_cmove          proc    near
+
+; First, check to see if we have any winning moves.
+
+                lea     si, OMoves
+                mov     cx, OCnt
+TryToWin:       TryMov
+                jc      Won
+                add     si, 10
+                loop    TryToWin
+
+; If no winning moves, see if we have to block X.
+
+                lea     si, XMoves
+                mov     cx, XCnt
+TryToBlk:       TryMov
+                jc      Moved
+                add     si, 10
+                loop    TryToBlk
+
+; If we fall down here, just pick the first empty cell.
+
+                lea     si, GameBoard
+FindBlank:      cmp     byte ptr [si], ' '
+                je      FoundOne
+                inc     si
+                jmp     FindBlank
+
+FoundOne:       mov     byte ptr [si], 'O'
+                clc
+                ret
+
+Won:            mov     bl, [si]
+                mov     bh, 0
+                mov     GameBoard[bx], 'O'
+                stc
+                ret
+
+Moved:          mov     bl, [si]
+                mov     bh, 0
+                mov     GameBoard[bx],'O'
+                clc
+                ret
+_cmove          endp            
+                
+
+                
+Main            proc
+                mov     ax, dseg
+                mov     ds, ax
+                mov     es, ax
+
+
+
+; Do the first move manually.
+; If the user chooses the middle cell, pick the upper left hand
+; cell.  Otherwise pick the middle cell.
+
+                DispTTT
+                GetMove
+                cmp     GameBoard+4, " "        ;Middle Square?
+                je      MoveMiddle
+                mov     GameBoard, "O"          ;Upper left 
+corner.
+                jmp     SecondMove
+
+MoveMiddle:     mov     GameBoard+4, "O"
+
+
+; Okay, after the first move we need to get smart...
+
+SecondMove:     mov     MoveCntr, 4     ;Five possible moves, just did one.
+NextMove:       DispTTT
+                GetMove
+                dec     MoveCntr        ;Max possible four moves
+                jz      GameOver        ;Board full if four moves occur.
+
+
+                CmptMov
+                jnc     NextMove        ;Carry set if game over.
+
+GameOver:       DispTTT
+                print   nl,"Game Over",nl
+Quit:           ExitPgm                 ;DOS macro to quit program.
+Main            endp
+
+cseg            ends
+
+sseg            segment para stack 'stack'
+stk             db      512 dup (?)
+sseg            ends
+
+
+zzzzzzseg       segment para public 'zzzzzz'
+LastBytes       db      16 dup (?)
+zzzzzzseg       ends
+                end     Main
+
+</pre>
+		<hr>
+		<h2>Number of Web Site Hits since Dec 1, 1999:</h2>
+		<img src="./tictac3_files/counter.cgi">
+	
+
+
+</body></html>
